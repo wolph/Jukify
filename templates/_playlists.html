@@ -1,0 +1,7 @@
+{% for playlist in playlists.iterkeys() %}
+    <ul id="playlist_{{ playlists[playlist]['index']}}">{{ playlist }}
+    {% for i, track in enumerate(playlists[playlist]['tracks']) %}
+        <li><a class="song_link" href="javascript:void(0);" id="{{ playlists[playlist]['index'] }}:{{ i }}">{{ " - ".join([track[0], ", ".join(track[1]), track[2]]) }}</a></li>
+    {% end %}
+    </ul>
+{% end %}
