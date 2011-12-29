@@ -28,7 +28,7 @@ $(document).ready(function() {
         }));
     });
 
-    $(".song_link").click(function() {
+    $(".track_link").click(function() {
         jQuery.ajax($.extend(config, {
             data : {
                 command : 'queue',

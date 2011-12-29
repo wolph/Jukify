@@ -77,11 +77,18 @@ class MainHandler(tornado.web.RequestHandler):
 
     def playing(self):
         return jukebox_ui.do_queue()
+    
+    def current_track(self):
+        return jukebox_ui.get_current_track()
+
+    def current_playlist(self):
+        return jukebox_ui.get_current_playlist()
 
     def get(self):
         context = {
             'on_air': self.playing(),
-            #'position': jukebox_ui.
+            'current_track': self.current_track(),
+            'current_playlist': self.current_playlist(),
             'playlists': self.rendered_playlists()
         }
         self.render('jukebox.html', context=context)

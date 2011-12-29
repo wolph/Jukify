@@ -1,14 +1,14 @@
 #!/usr/bin/env python
+from spotify.manager import (SpotifySessionManager, SpotifyPlaylistManager,
+    SpotifyContainerManager)
 import app
+import os
+import spotify
+import threading
+import time
 import tornado
 import traceback
-import time
-import threading
-import os
 
-import spotify
-from spotify.manager import SpotifySessionManager, SpotifyPlaylistManager, \
-    SpotifyContainerManager
 
 AUDIO_HELPERS = (
     ('spotify.alsahelper', 'AlsaController'),
@@ -128,6 +128,12 @@ class JukeboxBaseUI(object):
         if not playlist or not track:
             return [[p, t] for p, t in self.jukebox._queue]
         self.jukebox.queue(int(playlist), int(track))
+
+    def get_current_track(self):
+        return self.jukebox.get_current_track()
+
+    def get_current_playlist(self):
+        return self.jukebox.get_current_playlist()
 
     def do_stop(self):
         self.jukebox.stop()
@@ -271,6 +277,12 @@ class JukeboxSessionManager(SpotifySessionManager):
     track = 0
     appkey_file = os.path.join(os.path.dirname(__file__), 'spotify_appkey.key')
 
+    def get_current_track(self):
+        return self.track
+
+    def get_current_playlist(self):
+        return self.playlist
+
     def message_to_user(self, session, message):
         print 'Message: ', message
 
@@ -289,7 +301,8 @@ class JukeboxSessionManager(SpotifySessionManager):
         self._queue = []
         self.playlist_manager = JukeboxPlaylistManager()
         self.container_manager = JukeboxContainerManager()
-        print 'Logging in, please wait...'
+        self.playlist = None
+        self.track = None
 
     def logged_in(self, session, error):
         if error:
@@ -311,18 +324,28 @@ class JukeboxSessionManager(SpotifySessionManager):
     def load_track(self, track):
         if self.playing:
             self.stop()
-        self.session.load(track)
-        print 'Loading %s' % track.name()
+        self.load(0, track)
+
+    def get_playlist(self, playlist):
+        if 0 <= playlist < len(self.ctr):
+            playlist = self.ctr[playlist]
+        elif playlist == len(self.ctr):
+            playlist = self.starred
+        return playlist
+
+    def get_track(self, playlist, track):
+        return playlist[track]
 
     def load(self, playlist, track):
         if self.playing:
             self.stop()
-        if 0 <= playlist < len(self.ctr):
-            pl = self.ctr[playlist]
-        elif playlist == len(self.ctr):
-            pl = self.starred
-        self.session.load(pl[track])
-        print 'Loading %s from %s' % (pl[track].name(), pl.name())
+
+        playlist = self.get_playlist(playlist)
+        track = self.get_track(playlist, track)
+        self.playlist = playlist
+        self.track = track
+        self.session.load(track)
+        print 'Loading %s from %s' % (track.name(), playlist.name())
 
     def queue(self, playlist, track):
         if self.playing:
@@ -331,32 +354,28 @@ class JukeboxSessionManager(SpotifySessionManager):
             self.load(playlist, track)
             self.play()
 
-    def play(self):
+    def play(self, playlist=None, track=None):
+        if playlist and track:
+            self.load(playlist, track)
         self.session.play(1)
-        print 'Playing'
         self.playing = True
 
     def stop(self):
         self.session.play(0)
-        print 'Stopping'
         self.playing = False
 
     def music_delivery(self, *a, **kw):
         return self.audio.music_delivery(*a, **kw)
 
     def next_(self):
-        print 'Next'
         self.stop()
         if self._queue:
-            t = self._queue.pop()
-            print 'Popping ', t
-            self.load(*t)
-            self.play()
+            t = self._queue.pop(0)
+            self.play(*t)
         else:
             self.stop()
 
     def end_of_track(self, sess):
-        print 'track ends.'
         self.next_()
 
     def search(self, *args, **kwargs):
