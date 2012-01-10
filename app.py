@@ -9,6 +9,7 @@ class Application(tornado.web.Application):
     def __init__(self):
         handlers = [
             (r'/', MainHandler),
+            (r'/playlists', PlaylistHandler),
             (r'/remote/', RemoteControlHandler),
         ]
         settings = dict(
@@ -58,6 +59,19 @@ class MessageMixin(object):
             cls.cache = cls.cache[-self.cache_size:]
 
 
+class PlaylistHandler(tornado.web.RequestHandler):
+    def get(self, *args, **kwargs):
+        playlists = jukebox_ui.get_playlists()
+        results = []
+        for playlist in playlists:
+            results.append({
+                'name': playlist.name(),
+            })
+        self.write({
+            'playlists': results,
+        })
+
+
 class MainHandler(tornado.web.RequestHandler):
     _playlists = {}
 
@@ -77,7 +91,7 @@ class MainHandler(tornado.web.RequestHandler):
 
     def playing(self):
         return jukebox_ui.do_queue()
-    
+
     def current_track(self):
         return jukebox_ui.get_current_track()
 
@@ -97,7 +111,8 @@ class RemoteControlHandler(tornado.web.RequestHandler):
     def play(self):
         track = self.get_argument('track', None)
         playlist = self.get_argument('playlist', None)
-        jukebox_ui.do_play(track=track, playlist=playlist)
+        url = self.get_argument('url', None)
+        jukebox_ui.do_play(track=track, playlist=playlist, url=url)
     play.remotecontrol = True
 
     def stop(self):
@@ -111,7 +126,8 @@ class RemoteControlHandler(tornado.web.RequestHandler):
     def queue(self):
         track = self.get_argument('track', None)
         playlist = self.get_argument('playlist', None)
-        jukebox_ui.do_queue(track=track, playlist=playlist)
+        url = self.get_argument('url', None)
+        jukebox_ui.do_queue(track=track, playlist=playlist, url=url)
     queue.remotecontrol = True
 
     def post(self):

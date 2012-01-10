@@ -8,6 +8,8 @@ import threading
 import time
 import tornado
 import traceback
+from ZODB.FileStorage import FileStorage
+from ZODB.DB import DB
 
 
 AUDIO_HELPERS = (
@@ -80,9 +82,15 @@ class JukeboxBaseUI(object):
                 else:
                     print '%3d %s' % (i, 'loading...')
 
-    def do_play(self, playlist=None, track=None):
+    def do_play(self, playlist=None, track=None, url=None):
         if playlist and track:
             self.jukebox.load(int(playlist), int(track))
+        if url:
+            link = spotify.Link.from_string(url)
+            if link.type() == spotify.Link.LINK_TRACK:
+                track = link.as_track()
+                self.jukebox.queue(track=track)
+
         self.jukebox.play()
 
     def do_browse(self, line):
@@ -124,10 +132,18 @@ class JukeboxBaseUI(object):
                 self.results = results
             self.jukebox.search(line, search_finished)
 
-    def do_queue(self, playlist=None, track=None):
-        if not playlist or not track:
-            return [[p, t] for p, t in self.jukebox._queue]
-        self.jukebox.queue(int(playlist), int(track))
+    def do_queue(self, playlist=None, track=None, url=None):
+        if playlist and track:
+            self.jukebox.queue(int(playlist), int(track))
+        elif url:
+            link = spotify.Link.from_string(url)
+            if link.type() == spotify.Link.LINK_TRACK:
+                track = link.as_track()
+                self.jukebox.queue(track=track)
+
+        else:
+            return self.jukebox._queue
+
 
     def get_current_track(self):
         return self.jukebox.get_current_track()
@@ -235,7 +251,7 @@ class JukeboxWebUI(JukeboxBaseUI, threading.Thread):
     def run(self):
         from app import Application
         app = Application()
-        app.listen(8888)
+        app.listen(8888, '0.0.0.0')
         tornado.ioloop.IOLoop.instance().start()
 
 ## playlist callbacks  ##
@@ -270,6 +286,13 @@ class JukeboxContainerManager(SpotifyContainerManager):
         print 'Container: playlist %s removed.' % p.name()
 
 
+class Database(object):
+    def __init__(self):
+        self.storage = FileStorage('db.fs')
+        self.db = DB(self.storage)
+        self.connection = self.db.open()
+        self.root = self.connection.root()
+
 class JukeboxSessionManager(SpotifySessionManager):
 
     queued = False
@@ -294,6 +317,7 @@ class JukeboxSessionManager(SpotifySessionManager):
 
     def __init__(self, *a, **kw):
         SpotifySessionManager.__init__(self, *a, **kw)
+        self.db = Database()
         self.audio = AudioController()
         self.ui = JukeboxWebUI(self)
         self.ctr = None
@@ -336,27 +360,27 @@ class JukeboxSessionManager(SpotifySessionManager):
     def get_track(self, playlist, track):
         return playlist[track]
 
-    def load(self, playlist, track):
+    def load(self, track):
         if self.playing:
             self.stop()
 
-        playlist = self.get_playlist(playlist)
-        track = self.get_track(playlist, track)
-        self.playlist = playlist
         self.track = track
         self.session.load(track)
-        print 'Loading %s from %s' % (track.name(), playlist.name())
+        print 'Loading %s' % (track.name())
 
-    def queue(self, playlist, track):
-        if self.playing:
-            self._queue.append((playlist, track))
-        else:
-            self.load(playlist, track)
-            self.play()
+    def queue(self, playlist=None, track=None):
+        if playlist:
+            playlist = self.get_playlist(playlist)
+            self._queue.append(self.get_track(playlist, track))
+        elif track:
+            self._queue.append(track)
 
-    def play(self, playlist=None, track=None):
-        if playlist and track:
-            self.load(playlist, track)
+        if not self.playing:
+            self.next_()
+
+    def play(self, track=None):
+        if track:
+            self.load(track)
         self.session.play(1)
         self.playing = True
 
@@ -370,8 +394,7 @@ class JukeboxSessionManager(SpotifySessionManager):
     def next_(self):
         self.stop()
         if self._queue:
-            t = self._queue.pop(0)
-            self.play(*t)
+            self.play(self._queue.pop(0))
         else:
             self.stop()
 
