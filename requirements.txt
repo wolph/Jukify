@@ -1,5 +1,5 @@
 MarkupSafe==0.15
 PyAudio==0.2.4
 -e git+git@github.com:tbarbugli/pyspotify.git@d208ae10f9dc49910df36b2181b0ba94413ca55b#egg=pyspotify-develop
-tornado==2.1.1
+tornado==6.3.2
 wsgiref==0.1.2
